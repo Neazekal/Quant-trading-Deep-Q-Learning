@@ -1,0 +1,13 @@
+# Core RL / ML
+torch
+gymnasium
+numpy
+pandas
+
+# Exchange API
+python-binance
+
+# Optional plotting / analysis
+matplotlib
+seaborn
+tqdm

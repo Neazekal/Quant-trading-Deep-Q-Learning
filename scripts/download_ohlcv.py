@@ -20,6 +20,7 @@ from typing import Iterable, List
 
 import pandas as pd
 from binance import Client
+from tqdm import tqdm
 
 # Interval mapping to milliseconds for pagination increments.
 # Binance limits klines per request; we page forward using this increment.
@@ -84,29 +85,38 @@ def fetch_klines(
     """Paginate through klines until end_ms or data exhausted.
 
     We use small page steps (limit=1500) to avoid hitting server caps and to
-    maintain predictable memory usage for long date ranges.
+    maintain predictable memory usage for long date ranges. Progress bar uses
+    the number of candles fetched (approximated when end_ms is known).
     """
     data: List[List] = []
     curr = start_ms
-    while True:
-        if spot:
-            klines = client.get_klines(
-                symbol=symbol, interval=interval, startTime=curr, endTime=end_ms, limit=1500
-            )
-        else:
-            klines = client.futures_klines(
-                symbol=symbol, interval=interval, startTime=curr, endTime=end_ms, limit=1500
-            )
+    increment = INTERVAL_MS[interval]
+    total_steps = None
+    if end_ms is not None:
+        total_steps = max(1, int((end_ms - start_ms) // increment))
 
-        if not klines:
-            break
+    with tqdm(total=total_steps, unit="bar", desc=f"{symbol} {interval}") as pbar:
+        while True:
+            if spot:
+                klines = client.get_klines(
+                    symbol=symbol, interval=interval, startTime=curr, endTime=end_ms, limit=1500
+                )
+            else:
+                klines = client.futures_klines(
+                    symbol=symbol, interval=interval, startTime=curr, endTime=end_ms, limit=1500
+                )
 
-        data.extend(klines)
-        last_open_time = klines[-1][0]
-        increment = INTERVAL_MS[interval]
-        curr = last_open_time + increment
-        if end_ms is not None and curr > end_ms:
-            break
+            if not klines:
+                break
+
+            data.extend(klines)
+            pbar.update(len(klines))
+
+            last_open_time = klines[-1][0]
+            curr = last_open_time + increment
+            if end_ms is not None and curr > end_ms:
+                break
+
     return data
 
 
