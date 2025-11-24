@@ -20,6 +20,7 @@ from typing import Iterable, List
 
 import pandas as pd
 from binance import Client
+from dotenv import load_dotenv
 from tqdm import tqdm
 
 # Interval mapping to milliseconds for pagination increments.
@@ -51,12 +52,6 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--start", required=True, help='Start date/time (e.g., "2024-01-01")')
     p.add_argument("--end", default=None, help='End date/time (optional, e.g., "2024-06-01")')
-    p.add_argument("--api-key", default=os.environ.get("BINANCE_API_KEY"), help="API key (or env BINANCE_API_KEY)")
-    p.add_argument(
-        "--api-secret",
-        default=os.environ.get("BINANCE_API_SECRET"),
-        help="API secret (or env BINANCE_API_SECRET)",
-    )
     p.add_argument(
         "--spot",
         action="store_true",
@@ -148,11 +143,14 @@ def klines_to_df(raw: Iterable[List], symbol: str, interval: str) -> pd.DataFram
 
 
 def main():
+    load_dotenv()
     args = parse_args()
-    if not args.api_key or not args.api_secret:
-        raise SystemExit("API key/secret required (set BINANCE_API_KEY / BINANCE_API_SECRET or pass flags).")
+    api_key = os.environ.get("BINANCE_API_KEY")
+    api_secret = os.environ.get("BINANCE_API_SECRET")
+    if not api_key or not api_secret:
+        raise SystemExit("API key/secret required via .env or environment variables.")
 
-    client = Client(args.api_key, args.api_secret, testnet=args.testnet)
+    client = Client(api_key, api_secret, testnet=args.testnet)
 
     start_ms = to_ts_ms(args.start)
     end_ms = to_ts_ms(args.end) if args.end else None

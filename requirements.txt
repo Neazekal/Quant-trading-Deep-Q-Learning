@@ -6,6 +6,7 @@ pandas
 
 # Exchange API
 python-binance
+python-dotenv
 
 # Optional plotting / analysis
 matplotlib
