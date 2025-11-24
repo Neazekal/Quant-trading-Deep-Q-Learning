@@ -79,7 +79,7 @@ def fetch_klines(
 ) -> List[List]:
     """Paginate through klines until end_ms or data exhausted.
 
-    We use small page steps (limit=1500) to avoid hitting server caps and to
+    We use small page steps (limit=1000) to stay well under API rate limits and
     maintain predictable memory usage for long date ranges. Progress bar uses
     the number of candles fetched (approximated when end_ms is known).
     """
@@ -94,11 +94,11 @@ def fetch_klines(
         while True:
             if spot:
                 klines = client.get_klines(
-                    symbol=symbol, interval=interval, startTime=curr, endTime=end_ms, limit=1500
+                    symbol=symbol, interval=interval, startTime=curr, endTime=end_ms, limit=1000
                 )
             else:
                 klines = client.futures_klines(
-                    symbol=symbol, interval=interval, startTime=curr, endTime=end_ms, limit=1500
+                    symbol=symbol, interval=interval, startTime=curr, endTime=end_ms, limit=1000
                 )
 
             if not klines:
@@ -116,14 +116,15 @@ def fetch_klines(
 
 
 def klines_to_df(raw: Iterable[List], symbol: str, interval: str) -> pd.DataFrame:
+    """Convert raw kline array to a lean OHLCV DataFrame."""
     cols = [
-        "open_time",  # milliseconds
+        "open_time",  # ms
         "open",
         "high",
         "low",
         "close",
         "volume",
-        "close_time",  # milliseconds
+        "close_time",  # ms
         "quote_volume",
         "trade_count",
         "taker_base_volume",
@@ -131,12 +132,15 @@ def klines_to_df(raw: Iterable[List], symbol: str, interval: str) -> pd.DataFram
         "ignore",
     ]
     df = pd.DataFrame(raw, columns=cols)
-    # Ensure numeric types
-    numeric_cols = [c for c in cols if c not in ("open_time", "close_time")]
-    df[numeric_cols] = df[numeric_cols].astype(float)
-    # Add human-friendly timestamps for inspection.
+
+    # Keep only the essentials to reduce memory and file size.
+    df = df[["open_time", "open", "high", "low", "close", "volume"]]
+
+    # Cast numerics and add human-friendly timestamp.
+    df[["open", "high", "low", "close", "volume"]] = df[
+        ["open", "high", "low", "close", "volume"]
+    ].astype(float)
     df["open_time_dt"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
-    df["close_time_dt"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
     df["symbol"] = symbol
     df["interval"] = interval
     return df
