@@ -62,6 +62,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Use testnet endpoints (both spot and futures have separate testnets)",
     )
+    p.add_argument(
+        "--with-funding",
+        action="store_true",
+        help="Include funding rates (futures only); merged and forward-filled onto klines.",
+    )
     return p.parse_args()
 
 
@@ -115,6 +120,34 @@ def fetch_klines(
     return data
 
 
+def fetch_funding_rates(
+    client: Client, symbol: str, start_ms: int, end_ms: int | None
+) -> pd.DataFrame:
+    """Fetch futures funding rates and return as DataFrame."""
+    rows: List[dict] = []
+    curr = start_ms
+    while True:
+        res = client.futures_funding_rate(
+            symbol=symbol, startTime=curr, endTime=end_ms, limit=1000
+        )
+        if not res:
+            break
+        rows.extend(res)
+        last_ts = int(res[-1]["fundingTime"])
+        curr = last_ts + 1  # move past last record
+        if end_ms is not None and curr > end_ms:
+            break
+
+    if not rows:
+        return pd.DataFrame(columns=["fundingTime", "fundingRate"])
+
+    df = pd.DataFrame(rows)
+    df["fundingTime"] = df["fundingTime"].astype(int)
+    df["fundingRate"] = df["fundingRate"].astype(float)
+    df["funding_dt"] = pd.to_datetime(df["fundingTime"], unit="ms", utc=True)
+    return df
+
+
 def klines_to_df(raw: Iterable[List], symbol: str, interval: str) -> pd.DataFrame:
     """Convert raw kline array to a lean OHLCV DataFrame."""
     cols = [
@@ -133,14 +166,14 @@ def klines_to_df(raw: Iterable[List], symbol: str, interval: str) -> pd.DataFram
     ]
     df = pd.DataFrame(raw, columns=cols)
 
-    # Keep only the essentials to reduce memory and file size.
-    df = df[["open_time", "open", "high", "low", "close", "volume"]]
-
     # Cast numerics and add human-friendly timestamp.
     df[["open", "high", "low", "close", "volume"]] = df[
         ["open", "high", "low", "close", "volume"]
     ].astype(float)
     df["open_time_dt"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
+
+    # Keep only the essentials to reduce memory and file size.
+    df = df[["open_time_dt", "open", "high", "low", "close", "volume"]]
     df["symbol"] = symbol
     df["interval"] = interval
     return df
@@ -165,6 +198,30 @@ def main():
         raise SystemExit("No klines returned. Check symbol/interval/date range.")
 
     df = klines_to_df(raw, args.symbol, args.interval)
+
+    # Funding rates (futures only)
+    if args.with_funding:
+        if args.spot:
+            print("Skipping funding: spot market selected.")
+        else:
+            fr = fetch_funding_rates(client, args.symbol, start_ms, end_ms)
+            if fr.empty:
+                print("Warning: no funding rates returned for range; funding_rate set to 0.")
+                df["funding_rate"] = 0.0
+            else:
+                # Align funding to klines: latest funding rate effective until next funding event.
+                fr = fr.sort_values("funding_dt")
+                df = df.sort_values("open_time_dt")
+                merged = pd.merge_asof(
+                    df,
+                    fr[["funding_dt", "fundingRate"]],
+                    left_on="open_time_dt",
+                    right_on="funding_dt",
+                    direction="backward",
+                )
+                merged["fundingRate"] = merged["fundingRate"].fillna(0.0)
+                merged = merged.rename(columns={"fundingRate": "funding_rate"})
+                df = merged.drop(columns=["funding_dt"])
 
     data_dir = Path("data")
     data_dir.mkdir(parents=True, exist_ok=True)
