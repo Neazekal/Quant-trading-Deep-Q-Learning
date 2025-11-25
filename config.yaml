@@ -1,0 +1,59 @@
+# TraderNet-CRv2 Training Configuration
+# =====================================
+
+# Data Configuration
+data:
+  train_path: "data/DOGEUSDT_1h_20200101_20251125_processed.csv"
+  val_path: null  # Optional: separate validation file
+  val_split: 0.2  # Use last 20% of data for validation if val_path is null
+  window_size: 12
+
+# Environment Configuration
+env:
+  initial_balance: 10000.0
+  fee_rate: 0.001  # 0.1% transaction fee
+  leverage: 1.0
+  max_position_size: 1.0
+
+# General Training Configuration
+training:
+  total_timesteps: 1000000
+  batch_size: 64
+  learning_rate: 0.0003  # 3e-4
+  gamma: 0.99
+  seed: 42
+  
+  # Logging & Checkpointing
+  log_freq: 1000          # Log every N steps
+  eval_freq: 10000        # Evaluate every N steps
+  save_freq: 50000        # Save checkpoint every N steps
+  save_best: true         # Save when new best reward achieved
+
+# PPO-Specific Configuration
+ppo:
+  gae_lambda: 0.95
+  clip_ratio: 0.2
+  entropy_coef: 0.01
+  value_coef: 0.5
+  max_grad_norm: 0.5
+  update_epochs: 10       # Number of epochs per update
+  n_steps: 2048           # Steps to collect before update
+  normalize_advantage: true
+
+# DQN-Specific Configuration
+dqn:
+  buffer_size: 100000
+  epsilon_start: 1.0
+  epsilon_end: 0.01
+  epsilon_decay: 0.995    # Decay per episode
+  tau: 0.005              # Soft update coefficient
+  target_update_freq: 1   # Update target every N steps (1 = soft update)
+  learning_starts: 1000   # Start training after N steps
+  train_freq: 4           # Train every N steps
+
+# System Configuration
+system:
+  device: "auto"          # auto, cuda, cpu, mps
+  save_dir: "checkpoints"
+  log_dir: "logs"
+  num_workers: 0          # DataLoader workers (0 = main process)
