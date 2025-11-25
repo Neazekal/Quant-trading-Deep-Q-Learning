@@ -10,7 +10,7 @@ data:
 
 # Environment Configuration
 env:
-  initial_balance: 10000.0
+  initial_balance: 200.0
   fee_rate: 0.001  # 0.1% transaction fee
   leverage: 1.0
   max_position_size: 1.0
